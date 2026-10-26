@@ -5,6 +5,12 @@ USE clsu_navigator_db;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+DROP TABLE IF EXISTS building_map_geometries;
+DROP TABLE IF EXISTS map_feature_geometries;
+DROP TABLE IF EXISTS building_categories;
+DROP TABLE IF EXISTS map_features;
+DROP TABLE IF EXISTS map_categories;
+DROP TABLE IF EXISTS map_assets;
 DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS event_venues;
 DROP TABLE IF EXISTS events;
@@ -47,6 +53,42 @@ CREATE TABLE departments (
     CONSTRAINT fk_departments_parent
         FOREIGN KEY (parent_department_id) REFERENCES departments(department_id)
         ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Map display assets: the Leaflet, detailed SVG, and black-and-white flat options.
+-- Store files on the server or storage service; keep only their paths and metadata here.
+CREATE TABLE map_assets (
+    map_asset_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    map_name VARCHAR(150) NOT NULL,
+    map_type ENUM('Leaflet','SVG','Flat') NOT NULL,
+    description VARCHAR(255) NULL,
+    asset_path VARCHAR(500) NULL,
+    asset_format ENUM('Tiles','GeoJSON','SVG','Image','JSON','Other') NOT NULL DEFAULT 'Other',
+    coordinate_system ENUM('Geographic','Image','SVG','Local') NOT NULL DEFAULT 'Geographic',
+    width_px INT UNSIGNED NULL,
+    height_px INT UNSIGNED NULL,
+    metadata JSON NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_map_assets_type_active (map_type, is_active)
+) ENGINE=InnoDB;
+
+-- Reusable categories for map filters. College names/codes should be added as data
+-- only after the official campus list has been confirmed.
+CREATE TABLE map_categories (
+    category_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    filter_group ENUM('Amenity','Facility','College Building') NOT NULL,
+    category_name VARCHAR(120) NOT NULL,
+    description VARCHAR(255) NULL,
+    icon_name VARCHAR(80) NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_map_category_group_name (filter_group, category_name),
+    INDEX idx_map_categories_group_active (filter_group, is_active, display_order)
 ) ENGINE=InnoDB;
 
 CREATE TABLE users (
@@ -122,7 +164,80 @@ CREATE TABLE buildings (
     CONSTRAINT fk_buildings_department
         FOREIGN KEY (department_id) REFERENCES departments(department_id)
         ON UPDATE CASCADE ON DELETE SET NULL,
-    INDEX idx_buildings_name (building_name)
+    INDEX idx_buildings_name (building_name),
+    INDEX idx_buildings_department (department_id)
+) ENGINE=InnoDB;
+
+-- Roads and land areas that are not represented by building records.
+CREATE TABLE map_features (
+    map_feature_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    feature_name VARCHAR(180) NOT NULL,
+    feature_type ENUM('Road','Land','Other') NOT NULL,
+    description TEXT NULL,
+    properties JSON NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_map_features_type_active (feature_type, is_active),
+    INDEX idx_map_features_name (feature_name)
+) ENGINE=InnoDB;
+
+-- Geometry is separated by map asset because geographic coordinates, SVG paths,
+-- and simplified flat-map geometry may use different coordinate systems.
+CREATE TABLE map_feature_geometries (
+    geometry_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    map_feature_id BIGINT UNSIGNED NOT NULL,
+    map_asset_id BIGINT UNSIGNED NOT NULL,
+    geometry_format ENUM('GeoJSON','SVGPath','ImageCoordinates','Other') NOT NULL,
+    geometry_data JSON NULL,
+    svg_path_data LONGTEXT NULL,
+    notes VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mfg_feature
+        FOREIGN KEY (map_feature_id) REFERENCES map_features(map_feature_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_mfg_asset
+        FOREIGN KEY (map_asset_id) REFERENCES map_assets(map_asset_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    UNIQUE KEY uq_map_feature_asset (map_feature_id, map_asset_id),
+    INDEX idx_mfg_asset (map_asset_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE building_map_geometries (
+    building_geometry_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    building_id BIGINT UNSIGNED NOT NULL,
+    map_asset_id BIGINT UNSIGNED NOT NULL,
+    geometry_format ENUM('GeoJSON','SVGPath','ImageCoordinates','Other') NOT NULL,
+    geometry_data JSON NULL,
+    svg_path_data LONGTEXT NULL,
+    label_x DECIMAL(12,4) NULL,
+    label_y DECIMAL(12,4) NULL,
+    notes VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_bmg_building
+        FOREIGN KEY (building_id) REFERENCES buildings(building_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_bmg_asset
+        FOREIGN KEY (map_asset_id) REFERENCES map_assets(map_asset_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    UNIQUE KEY uq_building_map_asset (building_id, map_asset_id),
+    INDEX idx_bmg_asset (map_asset_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE building_categories (
+    building_id BIGINT UNSIGNED NOT NULL,
+    category_id BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (building_id, category_id),
+    CONSTRAINT fk_bc_building
+        FOREIGN KEY (building_id) REFERENCES buildings(building_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_bc_category
+        FOREIGN KEY (category_id) REFERENCES map_categories(category_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    INDEX idx_bc_category (category_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE floors (
@@ -158,13 +273,26 @@ CREATE TABLE rooms (
 
 CREATE TABLE amenities (
     amenity_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    category_id BIGINT UNSIGNED NULL,
+    building_id BIGINT UNSIGNED NULL,
     amenity_name VARCHAR(120) NOT NULL,
-    category ENUM('Accessibility','Restroom','Safety','Service','Facility','Other') NOT NULL DEFAULT 'Other',
     description TEXT NULL,
     icon_name VARCHAR(80) NULL,
+    latitude DECIMAL(10,7) NULL,
+    longitude DECIMAL(10,7) NULL,
+    map_position JSON NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_amenity_name_category (amenity_name, category)
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_amenities_category
+        FOREIGN KEY (category_id) REFERENCES map_categories(category_id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_amenities_building
+        FOREIGN KEY (building_id) REFERENCES buildings(building_id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    INDEX idx_amenities_category (category_id),
+    INDEX idx_amenities_building (building_id),
+    INDEX idx_amenities_name (amenity_name)
 ) ENGINE=InnoDB;
 
 CREATE TABLE floorplans (
@@ -422,11 +550,26 @@ INSERT INTO roles (role_name, description) VALUES
 ('Student', 'Student user who can view permitted Type A plans and request restricted Type A access.'),
 ('Guest', 'Guest user limited to public campus information; cannot view interior floor plan diagrams.');
 
+INSERT INTO map_categories (filter_group, category_name, description, display_order) VALUES
+('Amenity', 'Academic Support', 'Amenities related to academic assistance and learning support.', 1),
+('Amenity', 'Sports & Recreation', 'Amenities for sports, exercise, and recreation.', 2),
+('Amenity', 'Health & Wellbeing', 'Amenities related to health, wellness, and personal care.', 3),
+('Amenity', 'Daily Living & Dining', 'Amenities for everyday needs, food, and dining.', 4),
+('Facility', 'Academic & Instructional Facilities', 'Facilities used for teaching, learning, and instruction.', 1),
+('Facility', 'Research & Innovation Facilities', 'Facilities used for research, development, and innovation.', 2),
+('Facility', 'Residential & Living Facilities', 'Facilities used for residence and campus living.', 3),
+('Facility', 'Administrative & Student Support Facilities', 'Facilities for administration and student support.', 4),
+('Facility', 'Athletic & Recreational Facilities', 'Facilities for athletics, sports, and recreation.', 5),
+('Facility', 'Institutional Support & Infrastructure', 'Facilities supporting campus operations and infrastructure.', 6);
+
 INSERT INTO permissions (permission_code, description) VALUES
 ('users.manage', 'Create, update, deactivate, and manage user accounts.'),
 ('roles.manage', 'Manage roles and role permissions.'),
 ('departments.manage', 'Manage departments and organizational units.'),
 ('buildings.manage', 'Manage campus building records.'),
+('map_assets.manage', 'Manage map versions and map asset references.'),
+('map_features.manage', 'Manage road, land, and other map feature records.'),
+('map_categories.manage', 'Manage map filter categories.'),
 ('floors.manage', 'Manage floor records.'),
 ('rooms.manage', 'Manage room records.'),
 ('amenities.manage', 'Manage amenities and accessibility features.'),
@@ -451,14 +594,15 @@ SELECT r.role_id, p.permission_id
 FROM roles r
 JOIN permissions p ON
     (r.role_name = 'Super Admin' AND p.permission_code IN (
-        'users.manage','roles.manage','departments.manage','buildings.manage','floors.manage',
+        'users.manage','roles.manage','departments.manage','buildings.manage','map_assets.manage',
+        'map_features.manage','map_categories.manage','floors.manage',
         'rooms.manage','amenities.manage','type_a.view_public','type_a.manage_department',
         'type_a.view_restricted','type_a.approve_access','type_b.view','type_b.manage',
         'type_b.approve','type_b.history.view','audit.view','access_requests.manage',
         'events.view_public','events.create','events.manage_department','events.approve','events.manage_all'
     ))
  OR (r.role_name = 'Admin' AND p.permission_code IN (
-        'buildings.manage','floors.manage','rooms.manage','amenities.manage',
+        'buildings.manage','map_features.manage','map_categories.manage','floors.manage','rooms.manage','amenities.manage',
         'type_a.view_public','type_a.manage_department','type_a.view_restricted',
         'access_requests.manage','events.view_public','events.create','events.manage_department'
     ))
@@ -474,3 +618,4 @@ JOIN permissions p ON
  OR (r.role_name = 'Guest' AND p.permission_code IN (
         'type_a.view_public','events.view_public'
     ));
+    
