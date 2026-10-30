@@ -10,13 +10,14 @@ use Illuminate\Support\Facades\Hash;
 
 class LoginController extends Controller
 {
+    // /login opens the homepage pop-up
     public function show()
     {
         if (Auth::check()) {
             return redirect('/');
         }
 
-        return view('auth.login');
+        return redirect()->route('home')->with('open_login', true);
     }
 
     public function login(Request $request)
@@ -28,15 +29,25 @@ class LoginController extends Controller
 
         $user = User::where('email', $credentials['email'])->first();
 
-        if (
-            !$user ||
-            strtolower((string) $user->account_status) !== 'active' ||
-            !Hash::check($credentials['password'], $user->password_hash)
-        ) {
+        // Check the password first so account status stays private
+        if (!$user || !Hash::check($credentials['password'], $user->password_hash)) {
             return back()
-                ->withErrors([
-                    'email' => 'The email or password is incorrect, or the account is inactive.',
-                ])
+                ->withErrors(['email' => 'Incorrect email or password. Check your details, or ask your CLSU administrator.'])
+                ->onlyInput('email');
+        }
+
+        $status = strtolower((string) $user->account_status);
+
+        if ($status !== 'active') {
+            $message = match ($status) {
+                'pending' => 'Your account is waiting for activation. Contact your CLSU administrator.',
+                'suspended' => 'Your account is suspended. Contact your CLSU administrator.',
+                'deactivated' => 'Your account has been deactivated. Contact your CLSU administrator.',
+                default => 'Your account is not active. Contact your CLSU administrator.',
+            };
+
+            return back()
+                ->withErrors(['email' => $message])
                 ->onlyInput('email');
         }
 

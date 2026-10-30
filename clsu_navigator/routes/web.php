@@ -6,6 +6,9 @@ use App\Http\Controllers\Auth\LogoutController;
 
 Route::view('/', 'home')->name('home');
 
+// Public map
+Route::view('/map', 'map')->name('map');
+
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])
         ->name('login');
