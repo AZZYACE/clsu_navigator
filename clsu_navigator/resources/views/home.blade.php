@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
     <title>CLSU Navigator | Interactive Campus Map</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,7 +14,7 @@
 
 <div class="site-top-wrap" id="topWrap"><div class="site-top" id="siteTop">
 
-<div class="strip"><div class="in"><div><span>op@clsu.edu.ph</span><span>(044) 940 8785</span></div><div>Official CLSU website: clsu.edu.ph ↗</div></div></div>
+<div class="strip"><div class="in"><div><span><a href="mailto:op@clsu.edu.ph">op@clsu.edu.ph</a></span><span><a href="tel:+63449408785">(044) 940 8785</a></span></div><div>Official CLSU website: <a href="https://clsu.edu.ph/" target="_blank" rel="noopener noreferrer">clsu.edu.ph ↗</a></div></div></div>
 
 <header class="head"><div class="in">
   <img class="seal-img" src="{{ asset('images/clsu-seal.png') }}" alt="CLSU seal">
@@ -27,8 +28,8 @@
   <ul>
     <li class="on"><a href="#home">HOME</a></li><li><a href="#about">ABOUT</a></li><li><a href="#features">FEATURES</a></li><li><a href="#how">HOW TO USE</a></li><li><a href="#access">ACCESS &amp; ACCESSIBILITY</a></li>{{-- <li><a href="#help">HELP</a></li> --}}
   </ul>
+  <a class="nav-box" href="{{ route('map') }}">CAMPUS MAP</a>
   <div class="acts">
-    <a href="{{ route('map') }}">CAMPUS MAP</a>
     @auth
       <span class="who">{{ Auth::user()->full_name }}</span>
       <form method="POST" action="{{ route('logout') }}">
@@ -59,7 +60,7 @@
   <div class="ph"><span>CAMPUS PHOTO / ILLUSTRATION · dark green overlay · carousel dots</span></div>
 </div></section>
 
-<section class="sec" id="about"><div class="in">
+<section class="sec green" id="about"><div class="in">
   <div class="lbl">About</div>
   <h2 class="h2">About CLSU Navigator</h2>
   <div class="about">
@@ -79,7 +80,7 @@
   </div>
 </div></section>
 
-<section class="sec alt" id="features"><div class="in">
+<section class="sec" id="features"><div class="in">
   <div class="lbl">Features</div>
   <h2 class="h2">What you can find</h2>
   <div class="grid3">
@@ -92,7 +93,7 @@
   </div>
 </div></section>
 
-<section class="sec" id="how"><div class="in">
+<section class="sec green" id="how"><div class="in">
   <div class="lbl">How to use</div>
   <h2 class="h2">How to use CLSU Navigator</h2>
   <div class="grid3">
@@ -107,7 +108,7 @@
   <div class="center"><a class="btn primary" href="{{ route('map') }}">Get Started</a></div>
 </div></section>
 
-<section class="sec alt" id="access"><div class="in">
+<section class="sec" id="access"><div class="in">
   <div class="lbl">Access</div>
   <h2 class="h2">Who can use it</h2>
   <div class="grid3 two">
@@ -117,11 +118,11 @@
   <p class="fine-line">Accounts are created by CLSU administrators only. There is no public sign-up.</p>
 </div></section>
 
-<section class="sec" id="accessibility"><div class="in">
+<section class="sec green" id="accessibility"><div class="in">
+  <div class="lbl">Accessibility</div>
+  <h2 class="h2">Accessibility information</h2>
   <div class="a11y">
     <div>
-      <div class="lbl">Accessibility</div>
-      <h2 class="h2">Accessibility information</h2>
       <p class="lead">Find accessibility features on campus, where information has been provided. Features shown on interior floor plans need a login.</p>
       <div class="icons"><div><i></i>Ramps</div><div><i></i>Elevators</div><div><i></i>Accessible entrances</div><div><i></i>Accessible restrooms</div></div>
     </div>
@@ -132,46 +133,14 @@
 <footer class="foot"><div class="in">
   <div class="cols">
     <div><h4>CLSU Navigator</h4><p>An Interactive Campus Map and Information System<br>Central Luzon State University</p></div>
-    <div><h4>Quick links</h4><p>Home · About · Features<br>How to Use · Access &amp; Accessibility<br>Login</p></div>
-    <div><h4>Contact</h4><p>op@clsu.edu.ph<br>(044) 940 8785<br>Science City of Muñoz, Nueva Ecija</p></div>
+    <div><h4>Quick links</h4><p>Home · About · Features<br>How to Use · Access &amp; Accessibility<br>Login<br><a href="https://clsu.edu.ph/" target="_blank" rel="noopener noreferrer">Official CLSU website ↗</a></p></div>
+    <div><h4>Contact</h4><p><a href="mailto:op@clsu.edu.ph">op@clsu.edu.ph</a><br><a href="tel:+63449408785">(044) 940 8785</a><br>Science City of Muñoz, Nueva Ecija</p></div>
   </div>
 </div></footer>
 
-@guest
-{{-- Login pop-up --}}
-<div class="modal" id="loginModal" hidden data-open="{{ ($errors->any() || session('open_login')) ? '1' : '0' }}">
-  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-    <button class="x" type="button" aria-label="Close login" data-close>&times;</button>
-    <div class="m-head">
-      <img class="seal-img sm" src="{{ asset('images/clsu-seal.png') }}" alt="CLSU seal">
-      <div><h2 id="loginTitle">Log in</h2><p>CLSU Navigator</p></div>
-    </div>
-    <p class="m-lead">For CLSU students, faculty, staff, and admins.</p>
-
-    <form method="POST" action="{{ route('login.submit') }}">
-      @csrf
-      @if ($errors->any())
-        <div class="alert" role="alert">{{ $errors->first() }}</div>
-      @endif
-
-      <label for="loginEmail">Email address</label>
-      <input id="loginEmail" name="email" type="email" value="{{ old('email') }}" placeholder="Enter your email address" autocomplete="username" required>
-
-      <label for="loginPassword">Password</label>
-      <div class="pw">
-        <input id="loginPassword" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
-        <button type="button" id="pwToggle" aria-controls="loginPassword">Show</button>
-      </div>
-
-      <button class="btn primary full" type="submit">Log in</button>
-    </form>
-
-    <p class="m-note">No account yet? Accounts are created by CLSU administrators. Forgot your password? Ask your administrator to reset it.</p>
-    <div class="m-guest">Just browsing? <a href="{{ route('map') }}" data-close>Continue as guest</a></div>
-  </div>
-</div>
-@endguest
+@include('partials.login_modal')
 
 <script src="{{ asset('js/home.js') }}?v={{ filemtime(public_path('js/home.js')) }}" defer></script>
+<script src="{{ asset('js/login_modal.js') }}?v={{ filemtime(public_path('js/login_modal.js')) }}" defer></script>
 </body>
 </html>
